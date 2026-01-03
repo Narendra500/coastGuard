@@ -99,12 +99,7 @@ def _atomic_write_json(path: str, data: Any) -> None:
 #------------------------------
 
 def format_final_api_output(report: Dict[str, Any]) -> list:
-    """
-    Convert internal pipeline report → external API schema
-    Applies rule:
-    - relevance_score = -100 if reverse image search finds prior uploads
-    """
-
+    
     inp = report.get("input", {})
     decision = report.get("decision", {})
     extra = inp.get("extra", {})
@@ -135,10 +130,11 @@ def format_final_api_output(report: Dict[str, Any]) -> list:
     else:
         relevance_score = f"{decision.get('confidence', 0) * 100:.2f}"
 
+    decoded = report.get("hazard_decoded", {})
 
     formatted = {
         "user_id": user.get("id", "unknown"),
-        "hazard_type": extra.get("hazard_type", ""),
+        "hazard_type": decoded.get("hazard_type") or extra.get("hazard_type", ""),
         "text": inp.get("text", ""),
         "location": {
             "lat": location.get("lat"),
@@ -150,7 +146,7 @@ def format_final_api_output(report: Dict[str, Any]) -> list:
         "report_time": inp.get("created_at"),
         "media_url": media_url,
         "media_type": media_type,
-        "platform": "api",
+        "platform": inp.get("platform"),
         "user_name": user.get("name"),
     }
 
@@ -159,11 +155,14 @@ def format_final_api_output(report: Dict[str, Any]) -> list:
 def format_alert_output(report: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert internal report → external alert schema
+    Priority is semantic (high / medium / low), not color-based.
+    Hazard type prefers GPT-decoded value.
     """
 
     inp = report.get("input", {})
     extra = inp.get("extra", {})
     location = inp.get("location", {})
+    decoded = report.get("hazard_decoded", {})
 
     # ---- Media extraction ----
     media_url = None
@@ -172,41 +171,45 @@ def format_alert_output(report: Dict[str, Any]) -> Dict[str, Any]:
     elif isinstance(inp.get("media"), str):
         media_url = inp["media"]
 
-    # ---- Priority mapping (simple & deterministic) ----
+    # ---- Priority mapping (semantic, not color-based) ----
     priority = "medium"
-    if extra.get("alert_level", "").lower() in ("red", "high"):
+
+    alert_level = (extra.get("alert_level") or "").lower()
+    confidence = report.get("decision", {}).get("confidence", 0)
+
+    if alert_level in ("red", "severe", "critical"):
         priority = "high"
-    elif extra.get("alert_level", "").lower() in ("yellow", "moderate"):
+    elif alert_level in ("yellow", "moderate"):
         priority = "medium"
-    elif extra.get("alert_level", "").lower() == "low":
+    elif alert_level in ("green", "low"):
         priority = "low"
+
+    # Optional: confidence-based escalation
+    if confidence >= 0.85:
+        priority = "high"
 
     return {
         "id": report.get("id"),
-        "priority": priority,
+        "priority": priority,  
         "location": {
             "lat": location.get("lat"),
             "long": location.get("lon"),
             "name": location.get("name"),
         },
         "platform": inp.get("platform"),
-        "type": extra.get("hazard_type"),
+        "type": decoded.get("hazard_type") or extra.get("hazard_type"),
         "text": inp.get("text"),
         "mediaUrl": media_url,
         "reported_at": inp.get("created_at"),
     }
 
 
+
 # ------------------------------
 # Output writer
 # ------------------------------
 def write_outputs(reports: list[Dict[str, Any]]):
-    """
-    Write final outputs and alerts for one or more pipeline reports.
-    - FINAL output is always a list
-    - ALERT output uses the new external alert schema
-    """
-
+   
     final_outputs = []
     alert_outputs = []
 
@@ -406,6 +409,50 @@ def gpt_decision_wrapper(text: str, reverse_search: Dict[str, Any], vision: Dict
         return json.loads(resp.choices[0].message.content)
     except Exception as e:
         return {"alert": False, "confidence": 0.0, "reasons": [f"gpt_error:{e}"]}
+    
+
+# ------------------------------
+# ChatGPT hazard type decoder
+# ------------------------------
+def gpt_decode_hazard_type(text: str, existing_hazard: str | None = None) -> Dict[str, Any]:
+    """
+    Use GPT to infer / normalize hazard type from text.
+    """
+
+    prompt = (
+        "You are a disaster classification system.\n\n"
+        "Given a report text, classify the primary hazard type.\n\n"
+        "Allowed hazard categories (choose ONE best match):\n"
+        "- Flood\n"
+        "- High Wave\n"
+        "- Tsunami\n"
+        "- Oil Spill\n"
+        f"Existing hazard (if any): {existing_hazard}\n\n"
+        f"Report text:\n{text}\n\n"
+        "Respond ONLY with valid JSON:\n"
+        "{"
+        "\"hazard_type\": string, "
+        "\"confidence\": number between 0 and 1"
+        "}"
+    )
+
+    try:
+        resp = openai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=120,
+            timeout=OPENAI_TIMEOUT,
+        )
+        return json.loads(resp.choices[0].message.content)
+
+    except Exception as e:
+        return {
+            "hazard_type": existing_hazard or "Other",
+            "confidence": 0.0,
+            "error": str(e),
+        }
+
 
 # ------------------------------
 # Full pipeline
@@ -421,6 +468,19 @@ def run_full_pipeline(msg: Dict[str, Any]) -> Dict[str, Any]:
 
     stage1 = stage1_process_message(msg)
     report["stage1_text"] = stage1
+
+    # ---- Hazard decoding (NEW) ----
+    extra = msg.get("extra", {})
+    existing_hazard = extra.get("hazard_type")
+
+    hazard_decoded = gpt_decode_hazard_type(
+        stage1["sanitized_text"],
+        existing_hazard
+    )
+
+    report["hazard_decoded"] = hazard_decoded
+
+    print("[DEBUG] hazard_decoded =", report.get("hazard_decoded"))
 
     # ✅ IMAGE NORMALIZATION (FIXED FOR YOUR INPUT)
     image_ref = None

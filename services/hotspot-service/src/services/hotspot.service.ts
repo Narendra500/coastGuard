@@ -11,76 +11,76 @@ const CLUSTER_DISTANCE_METERS = CLUSTER_DISTANCE_KM * 1000;
 
 export const updateHotspots = async () => {
     console.log('Running hotspot update job...');
-
     const clusteringQuery = `
-    WITH delete_old AS (
-        DELETE FROM hotspots
-    ),
+        WITH delete_old AS (
+            DELETE FROM hotspots
+        ),
 
-    all_recent_reports AS (
-        (
-            SELECT location, type_id
+        all_recent_reports AS (
+            SELECT location, hazard_type_id
             FROM hazard_reports
-            WHERE report_time > (NOW() - INTERVAL $1)
-              AND status_id = (
-                  SELECT status_id
-                  FROM report_statuses
-                  WHERE status_name = 'Officially Verified'
-              )
-              AND location IS NOT NULL
-        )
-        UNION ALL
-        (
-            SELECT location, NULL AS type_id
-            FROM social_media_posts
-            WHERE post_time > (NOW() - INTERVAL $1)
-              AND relevance_score > 0.8
-              AND location IS NOT NULL
-        )
-    ),
+            WHERE report_time > (NOW() - ($1::interval))
+            AND status_id = (
+                SELECT status_id
+                FROM report_statuses
+                WHERE status_name = 'Officially Verified'
+                LIMIT 1
+            )
 
-    all_reports_for_clustering AS (
-        SELECT
-            location,
-            type_id,
-            ST_ClusterDBSCAN(
-                location::geography,
+            AND location IS NOT NULL
+
+            UNION ALL
+
+            SELECT location, NULL AS hazard_type_id
+            FROM social_media_posts
+            WHERE post_time > (NOW() - ($1::interval))
+            AND relevance_score > 0.8
+            AND location IS NOT NULL
+        ),
+
+        all_reports_for_clustering AS (
+            SELECT
+                location,
+                hazard_type_id,
+                ST_ClusterDBSCAN(
+                ST_Transform(location, 3857),
                 eps := $2,
                 minpoints := $3
             ) OVER () AS cluster_id
-        FROM all_recent_reports
-    ),
+            FROM all_recent_reports
+        ),
 
-    final_clusters AS (
+        final_clusters AS (
+            SELECT
+                cluster_id,
+                COUNT(*) AS report_count,
+                ST_Centroid(ST_Collect(location)) AS center_location,
+                (
+                    SELECT hazard_type_id
+                    FROM (
+                        SELECT hazard_type_id, COUNT(*) AS type_count
+                        FROM all_reports_for_clustering r2
+                        WHERE r2.cluster_id = r.cluster_id
+                        AND r2.hazard_type_id IS NOT NULL
+                        GROUP BY hazard_type_id
+                        ORDER BY type_count DESC
+                        LIMIT 1
+                    ) t
+                ) AS dominant_hazard_type_id
+            FROM all_reports_for_clustering r
+            WHERE cluster_id IS NOT NULL
+            GROUP BY cluster_id
+        )
+
+        INSERT INTO hotspots (location, radius_km, intensity_score, dominant_hazard_type_id)
         SELECT
-            cluster_id,
-            COUNT(*) AS report_count,
-            ST_Centroid(ST_Collect(location)) AS center_location,
-            (
-                SELECT type_id
-                FROM (
-                    SELECT type_id, COUNT(*) AS type_count
-                    FROM all_reports_for_clustering r2
-                    WHERE r2.cluster_id = r.cluster_id AND r2.type_id IS NOT NULL
-                    GROUP BY type_id
-                    ORDER BY type_count DESC
-                    LIMIT 1
-                ) AS dominant_type
-            ) AS dominant_hazard_type_id
-        FROM all_reports_for_clustering r
-        WHERE cluster_id IS NOT NULL
-        GROUP BY cluster_id
-    )
-
-    INSERT INTO hotspots (location, radius_km, intensity_score, dominant_hazard_type_id)
-    SELECT
-        center_location,
-        $4 AS radius_km,
-        report_count AS intensity_score,
-        dominant_hazard_type_id
-    FROM final_clusters
-    WHERE report_count >= $3;
-    `;
+            center_location,
+            $4,
+            CAST(report_count AS DECIMAL(4,2)),
+            dominant_hazard_type_id
+        FROM final_clusters
+        WHERE report_count >= $3;
+        `;
     const params = [
         `${REPORT_TIME_HOURS} hours`,   // $1 = INTERVAL duration
         CLUSTER_DISTANCE_METERS,        // $2 = eps (meters)

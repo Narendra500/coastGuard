@@ -15,6 +15,11 @@ export interface MapCircle {
     radius: number; // in meters
     fillColor: string;
     strokeColor: string;
+    // NEW: Add interaction handler
+    onPress?: () => void;
+    // NEW: Add metadata for the click alert
+    title?: string;
+    description?: string;
 }
 
 export interface CoastMapProps {
@@ -22,5 +27,5 @@ export interface CoastMapProps {
     longitude: number;
     markers?: MapMarker[];
     circles?: MapCircle[];
-    className?: string; // For NativeWind
+    className?: string;
 }

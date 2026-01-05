@@ -8,19 +8,33 @@ import { Ionicons } from '@expo/vector-icons';
 const MAPBOX_TOKEN = "pk.eyJ1IjoibmFyZW5kcmE1MDAiLCJhIjoiY21qeTBxa3ZwMDIxMjNjc2VwY3plaHV5diJ9.erZlLP54bgS1Z9gjcRlK1w";
 
 export default function CoastMap({ latitude, longitude, markers, circles, className }: CoastMapProps) {
+    // Handle clicks on the map layers
+    const onMapClick = (event: any) => {
+        const feature = event.features?.[0];
+        if (feature && feature.layer.id.startsWith('circle-layer-')) {
+            // Find the circle data that matches this ID to call its specific onPress
+            const circleId = feature.layer.id.replace('circle-layer-', '');
+            const circle = circles?.find(c => String(c.id) === circleId);
+            if (circle && circle.onPress) {
+                circle.onPress();
+            }
+        }
+    };
+
     return (
         <View className={className || "h-full w-full"}>
             <Map
                 initialViewState={{
                     longitude: longitude,
                     latitude: latitude,
-                    zoom: 12
+                    zoom: 4 // Zoomed out to see India
                 }}
                 style={{ width: '100%', height: '100%' }}
-                mapStyle="mapbox://styles/mapbox/dark-v11" // Dark mode as per design requirements
+                mapStyle="mapbox://styles/mapbox/dark-v11"
                 mapboxAccessToken={MAPBOX_TOKEN}
+                interactiveLayerIds={circles?.map(c => `circle-layer-${c.id}`)} // Make circles clickable
+                onClick={onMapClick}
             >
-                {/* Render Circles using GeoJSON Layers (More efficient for WebGL) */}
                 {circles?.map((c) => (
                     <Source
                         key={`source-${c.id}`}
@@ -32,30 +46,39 @@ export default function CoastMap({ latitude, longitude, markers, circles, classN
                         }}
                     >
                         <Layer
-                            id={`circle-${c.id}`}
+                            id={`circle-layer-${c.id}`}
                             type="circle"
                             paint={{
-                                'circle-radius': {
-                                    stops: [[0, 0], [20, c.radius / 5]] // Approximate meter scaling logic needed for precise radius
-                                },
+                                // FIX: Physically accurate meters-to-pixels approximation
+                                // At latitude ~0, 1px is roughly X meters depending on zoom.
+                                // This formula scales the pixel size exponentially with zoom to mimic physical size.
+                                'circle-radius': [
+                                    'interpolate',
+                                    ['exponential', 2],
+                                    ['zoom'],
+                                    0, 0,
+                                    22, ['/', c.radius, 0.019] // Rough calibration constant for physical scale
+                                ],
                                 'circle-color': c.fillColor,
                                 'circle-stroke-color': c.strokeColor,
                                 'circle-stroke-width': 2,
+                                'circle-opacity': 0.5
                             }}
                         />
                     </Source>
                 ))}
 
-                {/* Render Markers */}
                 {markers?.map((m) => (
                     <Marker
                         key={m.id}
                         longitude={m.longitude}
                         latitude={m.latitude}
                         anchor="bottom"
-                        onClick={m.onPress}
+                        onClick={(e) => {
+                            e.originalEvent.stopPropagation();
+                            if (m.onPress) m.onPress();
+                        }}
                     >
-                        {/* Using an Icon since web markers are DOM elements */}
                         <Ionicons name="location" size={30} color={m.pinColor || 'red'} />
                     </Marker>
                 ))}

@@ -1,15 +1,19 @@
 import api from './api';
+import { MOCK_HOTSPOTS } from './mockHotspots';
 
 export interface Hotspot {
     hotspot_id: number;
-    location: { coordinates: [number, number] }; // [lon, lat]
+    location: { type: string, coordinates: number[] }; // [lon, lat]
     radius_km: number;
     intensity_score: number;
-    dominant_hazard_type_id: number;
+    dominant_hazard_type: string;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface Report {
     report_id: string;
+    report_time: string;
     type_name: string;
     location: { coordinates: [number, number] }; // [lon, lat]
     type_id: number;
@@ -18,7 +22,7 @@ export interface Report {
 
 export const fetchHotspots = async (): Promise<Hotspot[]> => {
     const response = await api.get('/hotspots/');
-    return response.data;
+    return response.data.length > 0 ? response.data : MOCK_HOTSPOTS;
 };
 
 export const fetchReports = async (lat: number, lon: number, radius: number): Promise<Report[]> => {
@@ -37,6 +41,5 @@ export const verifyReport = async (reportId: string) => {
 export const debunkReport = async (reportId: string) => {
     // Matches requirement from frontend.txt 
     const response = await api.patch(`/reports/debunk-user-report/${reportId}/`);
-    console.log(response)
     return response.data;
 };

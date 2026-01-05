@@ -100,20 +100,17 @@ export const updateHotspots = async () => {
 
 
 export const getActiveHotspots = async () => {
-    // OLD QUERY:
-    // const { rows } = await query('SELECT * FROM hotspots');
-
-    // NEW, BETTER QUERY:
     const getHotspotsQuery = `
     SELECT
       hotspot_id,
-      ST_AsGeoJSON(location)::json AS location, -- This is the magic part
+      ST_AsGeoJSON(location)::json AS location, 
       radius_km,
       intensity_score,
-      dominant_hazard_type_id,
+      type_name AS dominant_hazard_type,
       created_at,
       updated_at
-    FROM hotspots;
+    FROM hotspots, hazard_types
+    WHERE dominant_hazard_type_id = type_id;
   `;
 
     const { rows } = await query(getHotspotsQuery);

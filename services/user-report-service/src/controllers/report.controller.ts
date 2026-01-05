@@ -66,69 +66,98 @@ export async function createReportHandler(req: any, res: Response) {
     }
 }
 
-// GET /reports
+
 export async function getReportsHandler(req: Request, res: Response) {
-    const lat = req.query.lat ? Number(req.query.lat) : null;
-    const lon = req.query.lon ? Number(req.query.lon) : null;
-    const radius_km = req.query.radius_km ? Number(req.query.radius_km) : null;
-    /*
-        status:
-        1: not_verified
-        2: official_verfied
-        3: community_verified
-    */
-    let status = req.query.status ? String(req.query.status) : true;
-    /*
-        types_ids: 
-        1:  tsunami
-        2:  high-wave
-        3:  oil-spill
-        4:  flooding 
-    */
-    const type_id = req.query.type_id ? Number(req.query.type_id) : null;
+    try {
+        // 1. Extract and Validate Parameters
+        const lat = req.query.lat ? Number(req.query.lat) : null;
+        const lon = req.query.lon ? Number(req.query.lon) : null;
+        const radius_km = req.query.radius_km ? Number(req.query.radius_km) : null;
+        const status = req.query.status ? String(req.query.status) : null;
+        const type_id = req.query.type_id ? Number(req.query.type_id) : null;
+        const limit = req.query.limit ? Math.min(Number(req.query.limit), 50) : 50;
 
-    let limit = req.query.limit ? Math.min(Number(req.query.limit), 50) : 50;
+        const params: any[] = [];
+        const whereClauses: string[] = ["hr.is_deleted = false"];
 
-    const params: any[] = [];
-    let whereClauses: string[] = ["is_deleted = false"];
-    // if (!isNaN(Number(type_id))) {
-    //     params.push(type_id);
-    //     whereClauses.push(`hazard_type_id = $${params.length}`);
-    // }
+        // 2. Build Dynamic Filters
 
-    if (typeof status === "string") {
-        params.push(`%${status}%`);
-        whereClauses.push(`status_name ILIKE $${params.length}`);
+        // Filter by Status Name (e.g., 'official_verified')
+        if (status) {
+            params.push(`%${status}%`);
+            whereClauses.push(`rs.status_name ILIKE $${params.length}`);
+        }
+
+        // Filter by Hazard Type ID
+        if (type_id && !isNaN(type_id)) {
+            params.push(type_id);
+            whereClauses.push(`hr.hazard_type_id = $${params.length}`);
+        }
+
+        // Filter by Location (PostGIS ST_DWithin)
+        // Note: ST_MakePoint takes (Longitude, Latitude) order
+        if (lat !== null && lon !== null && radius_km !== null) {
+            params.push(lon); // $N
+            params.push(lat); // $N+1
+            params.push(radius_km * 1000); // $N+2 (Convert km to meters)
+
+            const pIdx = params.length - 2; // Index of longitude
+            whereClauses.push(`
+                ST_DWithin(
+                    hr.location::geography, 
+                    ST_SetSRID(ST_MakePoint($${pIdx}, $${pIdx + 1}), 4326)::geography, 
+                    $${pIdx + 2}
+                )
+            `);
+        }
+
+        // 3. Add Limit Parameter
+        params.push(limit);
+        const limitParamIndex = params.length;
+
+        // 4. Construct Final Query
+        const query = `
+            SELECT 
+                hr.report_id,
+                hr.description,
+                hr.created_at as report_time,
+                hr.relevance_score,
+                hr.hazard_type_id,
+                ht.type_name,
+                hr.user_id,
+                u.user_name,
+                hr.status_id,
+                rs.status_name,
+                ST_AsGeoJSON(hr.location)::json as location,
+                hr.location_name,
+                COALESCE(
+                    array_agg(rm.media_url) FILTER (WHERE rm.media_url IS NOT NULL), 
+                    '{}'
+                ) as media_urls
+            FROM hazard_reports hr
+            LEFT JOIN hazard_types ht ON hr.hazard_type_id = ht.type_id
+            LEFT JOIN report_statuses rs ON hr.status_id = rs.status_id
+            LEFT JOIN report_media rm ON hr.media_id = rm.media_id
+            LEFT JOIN users u ON hr.user_id = u.user_id
+            WHERE ${whereClauses.join(' AND ')}
+            GROUP BY 
+                hr.report_id, 
+                ht.type_name, 
+                rs.status_name, 
+                u.user_name
+            ORDER BY hr.report_time DESC
+            LIMIT $${limitParamIndex};
+        `;
+
+        // 5. Execute
+        const { rows } = await pool.query(query, params);
+
+        return res.json(apiResponse(true, "Reports fetched successfully", rows));
+
+    } catch (error) {
+        console.error("Get Reports Error:", error);
+        return res.status(500).json(apiResponse(false, "Internal Server Error", null));
     }
-
-    let radiusClause = "";
-    if (!isNaN(Number(lat)) && !isNaN(Number(lon)) && !isNaN(Number(radius_km))) {
-        params.push(Number(lon || 0), Number(lat || 0), Number(radius_km || 0) * 1000);
-
-        const idx = params.length - 2;
-        radiusClause = `AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($${idx}, $${idx + 1}),4326)::geography, $${idx + 2})`;
-    }
-    const whereStatus = "status_name ILIKE $1"
-
-    const baseQuery = `
-    SELECT
-      hazard_reports.*,
-      hazard_types.type_name,
-      users.user_name,
-      report_statuses.status_name,
-      COALESCE(array_agg(report_media.media_url) FILTER (WHERE report_media.media_url IS NOT NULL), '{}') as media_urls
-    FROM hazard_reports 
-    LEFT JOIN hazard_types ON hazard_reports.hazard_type_id = hazard_types.type_id
-    LEFT JOIN report_statuses ON hazard_reports.status_id = report_statuses.status_id
-    LEFT JOIN report_media ON hazard_reports.media_id = report_media.media_id
-    LEFT JOIN users ON hazard_reports.user_id = users.user_id
-    WHERE ${typeof status === "string" ? whereStatus : '$1'}
-    GROUP BY hazard_reports.report_id, hazard_types.type_name, report_statuses.status_name, users.user_name
-    ORDER BY hazard_reports.report_time DESC
-  `;
-    params.push(limit);
-    const { rows } = await pool.query(baseQuery, [status]);
-    return res.json(apiResponse(true, "Reports fetched", rows));
 }
 
 // GET /reports/mine

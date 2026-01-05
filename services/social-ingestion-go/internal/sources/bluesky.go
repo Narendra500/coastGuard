@@ -60,7 +60,7 @@ func FetchBluesky() []Post {
 
 	req, _ := http.NewRequest(
 		"GET",
-		blueskyBase+"/app.bsky.feed.getTimeline?limit=50",
+		blueskyBase+"/app.bsky.feed.getTimeline?limit=5",
 		nil,
 	)
 	req.Header.Set("Authorization", "Bearer "+token)

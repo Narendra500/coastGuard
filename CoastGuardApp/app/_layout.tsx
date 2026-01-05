@@ -40,6 +40,8 @@ export default function RootLayout() {
                 router.replace('/official/dashboard');
             else if (user?.role === "citizen")
                 router.replace('/citizen')
+            else if (user?.role === "analyst")
+                router.replace("/analyst/dashboard")
         }
     }, [accessToken, isLoading, segments]);
 

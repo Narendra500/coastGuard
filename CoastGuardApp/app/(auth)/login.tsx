@@ -37,17 +37,17 @@ export default function LoginScreen() {
     };
 
     return (
-        <View className="flex-1 bg-gray-900 justify-center px-6">
+        <View className="flex-1 bg-gray-900 justify-center items-center px-6">
             <View className="mb-10">
-                <Text className="text-center md:text-6xl text-4xl font-bold text-blue-500 mb-2">CoastGuard</Text>
+                <Text className="text-center md:text-6xl text-5xl font-bold text-blue-500 mb-2">CoastGuard</Text>
                 <Text className="text-center md:text-3xl text-gray-400 text-lg">Situational awareness for everyone.</Text>
             </View>
 
-            <View className="md:mx-96 space-y-4">
+            <View className="md:mx-96 w-full md:w-1/2">
                 <View>
-                    <Text className="md:text-2xl text-gray-300 mb-1 ml-1">Email</Text>
+                    <Text className="md:text-2xl text-xl text-gray-300 mb-1 ml-1">Email</Text>
                     <TextInput
-                        className="w-full bg-gray-800 text-white md:text-xl p-4 md:mb-4 rounded-xl border border-gray-700 focus:border-blue-500"
+                        className="w-full bg-gray-800 text-white md:text-xl p-4 mb-4 rounded-xl border border-gray-700 focus:border-blue-500"
                         placeholder="citizen@example.com"
                         placeholderTextColor="#6b7280"
                         autoCapitalize="none"
@@ -56,10 +56,10 @@ export default function LoginScreen() {
                     />
                 </View>
 
-                <View>
-                    <Text className="md:text-2xl text-gray-300 mb-1 ml-1">Password</Text>
+                <View className='mt-4'>
+                    <Text className="md:text-2xl text-xl text-gray-300 mb-1 ml-1">Password</Text>
                     <TextInput
-                        className="w-full bg-gray-800 text-white md:text-xl p-4 md:mb-4 rounded-xl border border-gray-700 focus:border-blue-500"
+                        className="w-full bg-gray-800 text-white md:text-xl p-4 rounded-xl border border-gray-700 focus:border-blue-500"
                         placeholder="••••••••"
                         placeholderTextColor="#6b7280"
                         secureTextEntry
@@ -69,7 +69,7 @@ export default function LoginScreen() {
                 </View>
 
                 <TouchableOpacity
-                    className="w-full bg-blue-600 p-4 rounded-xl items-center mt-4 md:my-16"
+                    className="w-full bg-blue-600 p-4 rounded-xl hover:bg-blue-500 items-center mt-8 md:my-16"
                     onPress={handleLogin}
                     disabled={isSubmitting}
                 >
@@ -80,11 +80,11 @@ export default function LoginScreen() {
                     )}
                 </TouchableOpacity>
 
-                <View className="flex-row justify-center mt-6">
-                    <Text className="md:text-xl text-gray-400">Don't have an account? </Text>
+                <View className="flex-row justify-center mt-8">
+                    <Text className="text-xl text-gray-400">Don't have an account? </Text>
                     <Link href="/(auth)/register" asChild>
                         <TouchableOpacity>
-                            <Text className="md:text-xl text-blue-400 font-bold">Sign Up</Text>
+                            <Text className="text-xl text-blue-400 font-bold">Sign Up</Text>
                         </TouchableOpacity>
                     </Link>
                 </View>

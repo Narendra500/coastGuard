@@ -12,7 +12,7 @@ interface ReportCardProps {
 
 export default function ReportCard({ report, onPress, showActions, onVerify, onDebunk }: ReportCardProps) {
     return (
-        <TouchableOpacity onPress={onPress} activeOpacity={0.8} className="bg-gray-800 p-4 border-b border-gray-700">
+        <TouchableOpacity onPress={onPress} activeOpacity={0.8} className="self-center md:w-5/12 w-full h-fit bg-gray-800 p-4 border-b border-gray-700">
             {/* Header: User Info */}
             <View className="flex-row items-center mb-2">
                 <View className="w-10 h-10 bg-gray-600 rounded-full items-center justify-center mr-3">

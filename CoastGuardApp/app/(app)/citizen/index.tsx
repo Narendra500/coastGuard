@@ -18,7 +18,6 @@ export default function CitizenFeed() {
         queryKey: ['feed'],
         queryFn: fetchFeed,
     });
-    console.log(reports);
 
     return (
         <SafeAreaView className="flex-1 bg-gray-900" edges={['top']}>

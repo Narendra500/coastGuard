@@ -4,3 +4,4 @@ node_services_structure.md
 .env
 db_schema.txt
 docker-compose.yml
+private.pem

@@ -30,12 +30,13 @@ export const fetchReports = async (lat: number, lon: number, radius: number): Pr
 // Add verification methods
 export const verifyReport = async (reportId: string) => {
     // Matches requirement from frontend.txt 
-    const response = await api.patch(`/verify-user-report/${reportId}`);
+    const response = await api.patch(`/reports/verify-user-report/${reportId}/`);
     return response.data;
 };
 
 export const debunkReport = async (reportId: string) => {
     // Matches requirement from frontend.txt 
-    const response = await api.patch(`/debunk-user-report/${reportId}`);
+    const response = await api.patch(`/reports/debunk-user-report/${reportId}/`);
+    console.log(response)
     return response.data;
 };

@@ -11,7 +11,7 @@ const queryClient = new QueryClient();
 
 export default function RootLayout() {
     const netInfo = useNetInfo();
-    const { accessToken, isLoading, loadSession } = useAuthStore();
+    const { accessToken, isLoading, loadSession, user } = useAuthStore();
     const segments = useSegments();
     const router = useRouter();
 
@@ -36,7 +36,10 @@ export default function RootLayout() {
         } else if (accessToken && inAuthGroup) {
             // Redirect to app if accessToken exists and user is in auth group
             // Default to citizen for now, specific routing happens in login
-            router.replace('/citizen');
+            if (user?.role === "official")
+                router.replace('/official/dashboard');
+            else if (user?.role === "citizen")
+                router.replace('/citizen')
         }
     }, [accessToken, isLoading, segments]);
 

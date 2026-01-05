@@ -6,6 +6,8 @@ import ReportCard from '../../../components/Feed/ReportCard';
 import { verifyReport, debunkReport } from '../../../services/mapServices';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AlertModal from '@/components/ui/AlertModal';
+import { useState } from 'react';
 
 // Fetch only UNVERIFIED reports 
 const fetchUnverified = async () => {
@@ -17,6 +19,8 @@ const fetchUnverified = async () => {
 
 export default function TriageScreen() {
     const queryClient = useQueryClient();
+    const [verifyAlertVisible, setVerifyAlertVisible] = useState(false);
+    const [debunkAlertVisible, setDebunkAlertVisible] = useState(false);
 
     const { data: reports, isLoading, refetch } = useQuery({
         queryKey: ['unverified_reports'],
@@ -26,7 +30,14 @@ export default function TriageScreen() {
     const verifyMutation = useMutation({
         mutationFn: verifyReport,
         onSuccess: () => {
-            Alert.alert("Success", "Verified");
+            setVerifyAlertVisible(true);
+            < AlertModal
+                visible={verifyAlertVisible}
+                title="Request To Verify Report"
+                message="Report verified successfully."
+                onClose={() => setVerifyAlertVisible(false)
+                }
+            />
             queryClient.invalidateQueries({ queryKey: ['unverified_reports'] });
         }
     });
@@ -34,7 +45,14 @@ export default function TriageScreen() {
     const debunkMutation = useMutation({
         mutationFn: debunkReport,
         onSuccess: () => {
-            Alert.alert("Debunked", "Report marked as fake");
+            setDebunkAlertVisible(true);
+            < AlertModal
+                visible={debunkAlertVisible}
+                title="Request To Debunk Report"
+                message="Report debunked successfully."
+                onClose={() => setVerifyAlertVisible(false)
+                }
+            />
             queryClient.invalidateQueries({ queryKey: ['unverified_reports'] });
         }
     });

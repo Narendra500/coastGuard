@@ -68,7 +68,6 @@ export async function createReportHandler(req: any, res: Response) {
 
 // GET /reports
 export async function getReportsHandler(req: Request, res: Response) {
-    console.log("HIT")
     const lat = req.query.lat ? Number(req.query.lat) : null;
     const lon = req.query.lon ? Number(req.query.lon) : null;
     const radius_km = req.query.radius_km ? Number(req.query.radius_km) : null;
@@ -78,7 +77,7 @@ export async function getReportsHandler(req: Request, res: Response) {
         2: official_verfied
         3: community_verified
     */
-    const status = req.query.status ? String(req.query.status) : null;
+    let status = req.query.status ? String(req.query.status) : true;
     /*
         types_ids: 
         1:  tsunami
@@ -92,18 +91,14 @@ export async function getReportsHandler(req: Request, res: Response) {
 
     const params: any[] = [];
     let whereClauses: string[] = ["is_deleted = false"];
-    if (!isNaN(Number(type_id))) {
-        params.push(type_id);
-        whereClauses.push(`hazard_reports.hazard_type_id = $${params.length}`);
-    }
-    if (status) {
-        if (!isNaN(Number(status))) {
-            params.push(Number(status));
-            whereClauses.push(`hazard_reports.status_id = $${params.length}`);
-        } else {
-            whereClauses.push(`report_statuses.status_name ILIKE $${params.length + 1}`);
-            params.push(`%${status}%`);
-        }
+    // if (!isNaN(Number(type_id))) {
+    //     params.push(type_id);
+    //     whereClauses.push(`hazard_type_id = $${params.length}`);
+    // }
+
+    if (typeof status === "string") {
+        params.push(`%${status}%`);
+        whereClauses.push(`status_name ILIKE $${params.length}`);
     }
 
     let radiusClause = "";
@@ -111,27 +106,28 @@ export async function getReportsHandler(req: Request, res: Response) {
         params.push(Number(lon || 0), Number(lat || 0), Number(radius_km || 0) * 1000);
 
         const idx = params.length - 2;
-        radiusClause = `AND ST_DWithin(hazard_reports.location::geography, ST_SetSRID(ST_MakePoint($${idx}, $${idx + 1}),4326)::geography, $${idx + 2})`;
+        radiusClause = `AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($${idx}, $${idx + 1}),4326)::geography, $${idx + 2})`;
     }
+    const whereStatus = "status_name ILIKE $1"
 
     const baseQuery = `
     SELECT
       hazard_reports.*,
       hazard_types.type_name,
+      users.user_name,
       report_statuses.status_name,
       COALESCE(array_agg(report_media.media_url) FILTER (WHERE report_media.media_url IS NOT NULL), '{}') as media_urls
-    FROM hazard_reports
+    FROM hazard_reports 
     LEFT JOIN hazard_types ON hazard_reports.hazard_type_id = hazard_types.type_id
     LEFT JOIN report_statuses ON hazard_reports.status_id = report_statuses.status_id
     LEFT JOIN report_media ON hazard_reports.media_id = report_media.media_id
-    WHERE ${whereClauses.join(" AND ")} ${radiusClause}
-    GROUP BY hazard_reports.report_id, hazard_types.type_name, report_statuses.status_name
+    LEFT JOIN users ON hazard_reports.user_id = users.user_id
+    WHERE ${typeof status === "string" ? whereStatus : '$1'}
+    GROUP BY hazard_reports.report_id, hazard_types.type_name, report_statuses.status_name, users.user_name
     ORDER BY hazard_reports.report_time DESC
-    LIMIT $${params.length + 1}
   `;
     params.push(limit);
-    const { rows } = await pool.query(baseQuery, params);
-    console.log(rows);
+    const { rows } = await pool.query(baseQuery, [status]);
     return res.json(apiResponse(true, "Reports fetched", rows));
 }
 
@@ -174,16 +170,16 @@ export async function getMyReportsHandler(req: any, res: Response) {
     SELECT
       hazard_reports.*,
       hazard_types.type_name,
+      users.user_name,
       report_statuses.status_name,
       COALESCE(array_agg(report_media.media_url) FILTER (WHERE report_media.media_url IS NOT NULL), '{}') as media_urls
-    FROM hazard_reports
+    FROM hazard_reports 
     LEFT JOIN hazard_types ON hazard_reports.hazard_type_id = hazard_types.type_id
     LEFT JOIN report_statuses ON hazard_reports.status_id = report_statuses.status_id
     LEFT JOIN report_media ON hazard_reports.media_id = report_media.media_id
-    WHERE ${whereClauses.join(" AND ")} ${radiusClause}
-    GROUP BY hazard_reports.report_id, hazard_types.type_name, report_statuses.status_name
+    LEFT JOIN users ON hazard_reports.user_id = users.user_id
+    GROUP BY hazard_reports.report_id, hazard_types.type_name, report_statuses.status_name, users.user_name
     ORDER BY hazard_reports.report_time DESC
-    LIMIT $${params.length + 1}
   `;
     params.push(limit);
     const { rows } = await pool.query(baseQuery, params);
@@ -194,12 +190,17 @@ export async function verifyReport(req: any, res: any) {
     const userID = req.userId;
     const userRole = req.role;
     const reportID = req.params.report_id;
+    console.log("VERIFICATION ROUTE HIT")
 
     if (!userID || !userRole)
         throw new ApiError(HTTP_RESPONSE_CODE.BAD_REQUEST, "userID and userRole required for report verification");
 
+    console.log("DOES HAVE ID AND ROLE")
+
     if (userRole != "official")
         throw new ApiError(HTTP_RESPONSE_CODE.UNAUTHORIZED, "Only officials permitted to verify reports");
+
+    console.log("IS OFFICIAL")
 
     const query = `
         UPDATE hazard_reports
@@ -215,21 +216,26 @@ export async function verifyReport(req: any, res: any) {
 export async function debunkReport(req: any, res: any) {
     const userID = req.userId;
     const userRole = req.role;
-    const reportID = req.body.report_id;
+    const reportID = req.params.report_id;
+    console.log("debunk route HIT, reportID", reportID)
 
     if (!userID || !userRole)
         throw new ApiError(HTTP_RESPONSE_CODE.BAD_REQUEST, "userID and userRole required for report verification");
+    console.log("HAS ID AND ROLE")
 
     if (userRole != "official")
         throw new ApiError(HTTP_RESPONSE_CODE.UNAUTHORIZED, "Only officials permitted to verify reports");
+    console.log("IS OFFICIAL")
 
     const query = `
         UPDATE hazard_reports
         SET verified_by = $1, status_id = 4
         WHERE report_id = $2
+        RETURNING status_id
     `
 
-    await pool.query(query, [userID, reportID]);
+    const result = await pool.query(query, [userID, reportID]);
+    console.log(result)
 
     res.status(HTTP_RESPONSE_CODE.SUCCESS).json(apiResponse(true, "report debunked successfully"))
 }

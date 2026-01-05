@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import api from '../../../services/api';
 import uuid from "react-native-uuid"
 import { useAuthStore } from '@/store/authStore';
+import { showAlert } from '@/utils/alert';
 
 export default function ReportScreen() {
     const { draft, setDraft, resetDraft } = useReportStore();
@@ -30,7 +31,7 @@ export default function ReportScreen() {
             setLoadingLoc(true);
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission to access location was denied');
+                showAlert({ title: "location denied", message: "Permission to access location was denied" });
                 setLoadingLoc(false);
                 return;
             }
@@ -99,11 +100,11 @@ export default function ReportScreen() {
     };
     const handleSubmit = async () => {
         if (!draft.latitude || !draft.longitude) {
-            Alert.alert('Error', 'Location is required.');
+            showAlert({ title: 'Error', message: 'Location is required.' });
             return;
         }
         if (!draft.text && !draft.mediaUri) {
-            Alert.alert('Error', 'Please add a description or a photo.');
+            showAlert({ title: 'Error', message: 'Please add a description or a photo.' });
             return;
         }
 
@@ -124,7 +125,7 @@ export default function ReportScreen() {
         if (netInfo.isConnected === false) {
             // OFFLINE: Save to local queue
             addToQueue(reportData);
-            Alert.alert('Offline', 'Report saved locally. It will upload when you are back online.');
+            showAlert({ title: 'Offline', message: 'Report saved locally. It will upload when you are back online.' });
             resetDraft();
             router.back();
         } else {
@@ -135,7 +136,7 @@ export default function ReportScreen() {
                     try {
                         mediaUrl = await uploadToCloudinary(draft.mediaUri);
                     } catch (err) {
-                        Alert.alert("Upload Failed", "Could not upload image.");
+                        showAlert({ title: "Upload Failed", message: "Could not upload image." });
                         setIsSubmitting(false);
                         return;
                     }
@@ -152,7 +153,7 @@ export default function ReportScreen() {
 
                 await api.post('/reports/', payload);
 
-                Alert.alert('Success', 'Report uploaded successfully!');
+                showAlert({ title: 'Success', message: 'Report uploaded successfully!' });
                 resetDraft();
                 router.back();
 
@@ -160,7 +161,7 @@ export default function ReportScreen() {
                 console.log("Upload failed, falling back to queue", error);
                 // Fallback: If upload fails (e.g., weak signal), save to queue
                 addToQueue(reportData);
-                Alert.alert('Saved', 'Upload failed, but report saved locally. Will retry later.');
+                showAlert({ title: 'Saved', message: 'Upload failed, but report saved locally. Will retry later.' });
                 resetDraft();
                 router.back();
             }

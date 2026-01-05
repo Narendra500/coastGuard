@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Link } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import { showAlert } from '@/utils/alert';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -12,7 +13,7 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please fill in all fields');
+            showAlert({ title: 'Error', message: 'Please fill in all fields' });
             return;
         }
 
@@ -29,7 +30,7 @@ export default function LoginScreen() {
 
         } catch (error: any) {
             const msg = error.response?.data?.message || 'Login failed';
-            Alert.alert('Error', msg);
+            showAlert({ title: 'Error', message: msg });
         } finally {
             setIsSubmitting(false);
         }

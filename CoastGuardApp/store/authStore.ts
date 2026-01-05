@@ -29,6 +29,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     login: async (accessToken, refreshToken, user) => {
         await saveToken('access_token', accessToken);
         await saveToken('refresh_token', refreshToken);
+        await saveToken('user_data', JSON.stringify(user));
 
         set({ accessToken, refreshToken, user });
 
@@ -36,15 +37,16 @@ export const useAuthStore = create<AuthState>((set) => ({
         if (user.role === 'analyst') {
             // router.replace('/(app)/analyst/dashboard');
         } else if (user.role === 'official') {
-            // router.replace('/(app)/official/dashboard');
+            router.replace('/(app)/official/dashboard');
         } else {
-            // router.replace('/(app)/citizen/home');
+            router.replace('/(app)/citizen');
         }
     },
 
     register: async (accessToken, refreshToken, user) => {
         await saveToken('access_token', accessToken);
         await saveToken('refresh_token', refreshToken);
+        await saveToken('user_data', JSON.stringify(user));
 
         set({ accessToken, refreshToken, user });
 
@@ -52,15 +54,16 @@ export const useAuthStore = create<AuthState>((set) => ({
         if (user.role === 'analyst') {
             // router.replace('/(app)/analyst/dashboard');
         } else if (user.role === 'official') {
-            // router.replace('/(app)/official/dashboard');
+            router.replace('/(app)/official/dashboard');
         } else {
-            // router.replace('/(app)/citizen/home');
+            router.replace('/(app)/citizen');
         }
     },
 
     logout: async () => {
         await deleteToken('access_token');
         await deleteToken('refresh_token');
+        await deleteToken('user_data');
         set({ accessToken: null, refreshToken: null, user: null });
         router.replace('/(auth)/login');
     },
@@ -79,12 +82,21 @@ export const useAuthStore = create<AuthState>((set) => ({
     loadSession: async () => {
         const accessToken = await getToken('access_token');
         const refreshToken = await getToken('refresh_token');
+        const userDataString = await getToken('user_data');
 
         if (accessToken && refreshToken) {
-            set({ accessToken, refreshToken, isLoading: false });
+            let user = null;
+            if (userDataString) {
+                try {
+                    user = JSON.parse(userDataString);
+                } catch (e) {
+                    console.error("Failed to parse user data");
+                }
+            }
+            set({ accessToken, refreshToken, user, isLoading: false });
             // TODO: Fetch user profile here to populate 'user' object
         } else {
-            set({ accessToken: null, refreshToken: null, isLoading: false });
+            set({ accessToken: null, refreshToken: null, user: null, isLoading: false });
         }
     },
 }));

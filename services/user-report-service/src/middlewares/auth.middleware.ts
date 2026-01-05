@@ -31,7 +31,8 @@ export function authMiddleware(req: any, res: any, next: any) {
         //  Attach user payload to the request object
         req.userId = decoded.user_id;
         req.userName = decoded.user_name;
-        req.role = decoded.role;
+        req.role = decoded.user_role;
+        console.log("userId", req.userId, "Role", req.role)
 
         next();
     });

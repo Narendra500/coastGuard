@@ -28,8 +28,8 @@ async function bootstrap() {
 
         // routes
         app.post("/api/v1/reports", authMiddleware, createReportHandler);
-        app.patch("/api/v1/verify-user-report/:report_id", authMiddleware, verifyReport);
-        app.patch("/api/v1/debunk-user-report/:report_id", authMiddleware, debunkReport);
+        app.patch("/api/v1/reports/verify-user-report/:report_id", authMiddleware, verifyReport);
+        app.patch("/api/v1/reports/debunk-user-report/:report_id", authMiddleware, debunkReport);
         app.get("/api/v1/reports", authMiddleware, getReportsHandler);
         app.get("/api/v1/reports/mine", authMiddleware, getMyReportsHandler);
 

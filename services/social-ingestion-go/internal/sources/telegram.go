@@ -3,6 +3,7 @@ package sources
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -22,15 +23,14 @@ type tgUpdateResponse struct {
 }
 
 func FetchTelegram() []Post {
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	apiURL := fmt.Sprintf(
-		"https://api.telegram.org/bot%s/getUpdates",
-		token,
-	)
+	log.Println("[TELEGRAM] Fetching updates")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(apiURL)
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates", token)
+
+	resp, err := http.Get(url)
 	if err != nil {
+		log.Println("[TELEGRAM] HTTP error:", err)
 		return nil
 	}
 	defer resp.Body.Close()
@@ -38,8 +38,9 @@ func FetchTelegram() []Post {
 	var data tgUpdateResponse
 	json.NewDecoder(resp.Body).Decode(&data)
 
-	var posts []Post
+	log.Printf("[TELEGRAM] Received %d updates\n", len(data.Result))
 
+	var posts []Post
 	for _, upd := range data.Result {
 		cp := upd.ChannelPost
 		if cp.Text == "" {

@@ -12,14 +12,16 @@ type Publisher struct {
 }
 
 func New(url string) *Publisher {
+	log.Println("[RABBIT] Connecting to RabbitMQ")
+
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("[RABBIT] Connection failed:", err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("[RABBIT] Channel creation failed:", err)
 	}
 
 	_, err = ch.QueueDeclare(
@@ -31,14 +33,17 @@ func New(url string) *Publisher {
 		nil,
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("[RABBIT] Queue declare failed:", err)
 	}
 
+	log.Println("[RABBIT] Connected and queue ready")
 	return &Publisher{ch: ch}
 }
 
 func (p *Publisher) Publish(msg any) error {
 	body, _ := json.Marshal(msg)
+	log.Println("[RABBIT] Publishing message to reports queue")
+
 	return p.ch.Publish(
 		"",
 		"reports",

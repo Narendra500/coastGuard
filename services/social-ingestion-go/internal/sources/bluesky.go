@@ -3,7 +3,9 @@ package sources
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 )
@@ -12,22 +14,19 @@ const blueskyBase = "https://bsky.social/xrpc"
 
 type sessionResp struct {
 	AccessJwt string `json:"accessJwt"`
-	DID       string `json:"did"`
 }
 
-type timelineResp struct {
-	Feed []struct {
-		Post struct {
-			URI    string `json:"uri"`
-			Record struct {
-				Text      string `json:"text"`
-				CreatedAt string `json:"createdAt"`
-			} `json:"record"`
-			Author struct {
-				Handle string `json:"handle"`
-			} `json:"author"`
-		} `json:"post"`
-	} `json:"feed"`
+type searchResp struct {
+	Posts []struct {
+		URI    string `json:"uri"`
+		Author struct {
+			Handle string `json:"handle"`
+		} `json:"author"`
+		Record struct {
+			Text      string `json:"text"`
+			CreatedAt string `json:"createdAt"`
+		} `json:"record"`
+	} `json:"posts"`
 }
 
 func createSession() string {
@@ -53,40 +52,55 @@ func createSession() string {
 }
 
 func FetchBluesky() []Post {
+	log.Println("[BLUESKY] Starting keyword search")
+
 	token := createSession()
 	if token == "" {
+		log.Println("[BLUESKY] Session creation failed")
 		return nil
 	}
 
-	req, _ := http.NewRequest(
-		"GET",
-		blueskyBase+"/app.bsky.feed.getTimeline?limit=5",
-		nil,
-	)
-	req.Header.Set("Authorization", "Bearer "+token)
+	queries := []string{
+		"tsunami india",
+		"high wave india",
+		"storm surge india",
+		"coastal flooding india",
+	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil
+	var results []Post
+
+	for _, q := range queries {
+		log.Printf("[BLUESKY] Searching: %s\n", q)
+
+		endpoint := blueskyBase + "/app.bsky.feed.searchPosts?q=" +
+			url.QueryEscape(q) + "&limit=25"
+
+		req, _ := http.NewRequest("GET", endpoint, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[BLUESKY] Search failed (%s): %v\n", q, err)
+			continue
+		}
+
+		var data searchResp
+		json.NewDecoder(resp.Body).Decode(&data)
+		resp.Body.Close()
+
+		log.Printf("[BLUESKY] %d posts found for '%s'\n", len(data.Posts), q)
+
+		for _, p := range data.Posts {
+			results = append(results, Post{
+				ID:        p.URI,
+				Author:    p.Author.Handle,
+				Text:      p.Record.Text,
+				URL:       "https://bsky.app/profile/" + p.Author.Handle,
+				Timestamp: p.Record.CreatedAt,
+			})
+		}
 	}
-	defer resp.Body.Close()
 
-	var data timelineResp
-	json.NewDecoder(resp.Body).Decode(&data)
-
-	var posts []Post
-
-	for _, item := range data.Feed {
-		p := item.Post
-		posts = append(posts, Post{
-			ID:        p.URI,
-			Author:    p.Author.Handle,
-			Text:      p.Record.Text,
-			URL:       "https://bsky.app/profile/" + p.Author.Handle,
-			Timestamp: p.Record.CreatedAt,
-		})
-	}
-
-	return posts
+	return results
 }

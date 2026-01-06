@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
-import { publishUserReport } from "../rabbitmq.js";
+import { publishToQueue, publishUserReport } from "../rabbitmq.js";
 import { apiResponse } from "../utils/api.response.js";
 import { logger } from "../utils/logger.js";
 import { ApiError } from "../utils/api.error.js";
@@ -239,7 +239,55 @@ export async function verifyReport(req: any, res: any) {
 
     await pool.query(query, [userID, reportID]);
 
-    res.status(HTTP_RESPONSE_CODE.SUCCESS).json(apiResponse(true, "report verified successfully"))
+    const { rows } = await pool.query(`
+        SELECT type_name as hazard_type,
+                   ST_AsGeoJSON(location)::json AS location
+        FROM hazard_reports, hazard_types
+        WHERE report_id = $1 AND hazard_type_id = type_id
+    `, [reportID]);
+
+    const COOLDOWN_HOURS = 8; // Don't alert same area for 8 hours
+    const ALERT_RADIUS_KM = 5; // Consider events within 5km as "Same Incident"
+
+    console.log('rows: ', rows, 'location: ', rows[0].location, 'cords: ', rows[0].location.coordinates)
+
+    const duplicateCheck = await pool.query(`
+        SELECT id FROM notification_history
+        WHERE hazard_type = $1
+        AND sent_at > NOW() - INTERVAL '${COOLDOWN_HOURS} hours'
+        AND ST_DWithin(
+            location, 
+            ST_SetSRID(ST_MakePoint($2, $3), 4326), 
+            $4 * 1000 -- Convert km to meters
+        )
+    `, [rows[0].hazard_type, rows[0].location.coordinates[0], rows[0].location.coordinates[1], ALERT_RADIUS_KM]);
+
+    if (duplicateCheck.rows.length > 0) {
+        console.log(`[Suppressing Alert] Similar ${rows[0].hazard_type} alert already sent nearby.`);
+        return res.json({ success: true, message: "Report verified (Alert suppressed to avoid spam)" });
+    }
+
+    const alertPayload = {
+        type: 'CITIZEN_WARNING', // This triggers the logic we wrote in the previous step
+        priority: 'high',
+        location: {
+            lat: rows[0].location.coordinates[1],
+            long: rows[0].location.coordinates[0],
+            name: rows[0].location_name || "Coastline Area"
+        },
+        radius: ALERT_RADIUS_KM,
+        text: `Verified ${rows[0].hazard_type} detected near you. Please exercise caution.`
+    };
+
+    await publishToQueue('alerts', alertPayload);
+
+    // 5. LOG HISTORY (Start the cooldown)
+    await pool.query(`
+        INSERT INTO notification_history (hazard_type, location, radius_km, sent_at)
+        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, NOW())
+    `, [rows[0].hazard_type, alertPayload.location.long, alertPayload.location.lat, ALERT_RADIUS_KM]);
+
+    return res.json({ success: true, message: "Report verified and Citizens alerted." });
 }
 
 export async function debunkReport(req: any, res: any) {
@@ -268,3 +316,61 @@ export async function debunkReport(req: any, res: any) {
 
     res.status(HTTP_RESPONSE_CODE.SUCCESS).json(apiResponse(true, "report debunked successfully"))
 }
+
+export const updateUserLocation = async (req: any, res: Response) => {
+    const userId = req.userId;
+    const { latitude, longitude } = req.body;
+
+    if (!userId || !latitude || !longitude) {
+        throw new ApiError(HTTP_RESPONSE_CODE.BAD_REQUEST, "Bad Request");
+    }
+
+    const query = `
+        UPDATE users 
+        SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326),
+            updated_at = NOW()
+        WHERE user_id = $3
+    `;
+
+    await pool.query(query, [longitude, latitude, userId]);
+
+    res.json(apiResponse(true, "Location updated"))
+}
+
+export const broadcastRedAlertHandler = async (req: Request, res: Response) => {
+    try {
+        // 1. Extract Data from Official's Request
+        const { latitude, longitude, radius_km, message, hazard_type } = req.body;
+
+        if (!latitude || !longitude || !radius_km || !message) {
+            return res.status(400).json(apiResponse(false, "Missing required fields", null));
+        }
+        console.log("BROADCAST REQUEST")
+
+        // 2. Construct the Critical Payload
+        // Type 'RED_ALERT' triggers the "Broadcast to All" logic in the consumer
+        const alertPayload = {
+            type: 'RED_ALERT',
+            priority: 'critical',
+            hazard_type: hazard_type || "General Emergency",
+            location: {
+                lat: latitude,
+                long: longitude,
+                name: "Custom Broadcast Zone"
+            },
+            radius: radius_km,
+            text: `EMERGENCY ALERT: ${message}`
+        };
+
+        // 3. Push to RabbitMQ (High Priority Queue if you have one, otherwise standard)
+        await publishToQueue('alerts', alertPayload);
+
+        console.log(`[RED ALERT] Broadcast sent by official for coords ${latitude}, ${longitude}`);
+
+        return res.json(apiResponse(true, "Red Alert broadcast initiated successfully.", null));
+
+    } catch (error) {
+        console.error("Broadcast Error:", error);
+        return res.status(500).json(apiResponse(false, "Failed to broadcast alert", null));
+    }
+};

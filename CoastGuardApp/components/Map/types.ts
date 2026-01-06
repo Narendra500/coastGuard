@@ -8,6 +8,17 @@ export interface MapMarker {
     onPress?: () => void;
 }
 
+export interface Region {
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+}
+
+export interface CoastMapRef {
+    moveToRegion: (region: Region) => void;
+}
+
 export interface MapCircle {
     id: string | number;
     latitude: number;
@@ -15,9 +26,7 @@ export interface MapCircle {
     radius: number; // in meters
     fillColor: string;
     strokeColor: string;
-    // NEW: Add interaction handler
     onPress?: () => void;
-    // NEW: Add metadata for the click alert
     title?: string;
     description?: string;
 }
@@ -28,4 +37,5 @@ export interface CoastMapProps {
     markers?: MapMarker[];
     circles?: MapCircle[];
     className?: string;
+    onRegionChangeComplete?: (region: Region) => void;
 }

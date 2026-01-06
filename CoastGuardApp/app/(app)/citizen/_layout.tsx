@@ -1,8 +1,10 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
+import { useLocationTracking } from '@/hooks/useLocationTracking';
 
 export default function CitizenLayout() {
+    useLocationTracking();
     return (
         <Tabs
             screenOptions={{

@@ -44,6 +44,10 @@ func (s *Storage) CreateUser(user *models.User, roleID int) error {
 	return s.DB.QueryRow(query, user.Email, user.Username, user.Password, roleID).Scan(&user.ID, &user.Username, &user.Email)
 }
 
+func (s *Storage) UpdateLocation(latitude, longitude int) error {
+
+}
+
 func (s *Storage) GetUserRoleIDByName(roleName string) (int, error) {
 	var roleID int
 	query := `SELECT role_id FROM user_roles WHERE role_name = $1`

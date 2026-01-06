@@ -13,6 +13,10 @@ export interface Hotspot {
 
 export interface Report {
     report_id: string;
+    user_name: string;
+    relevance_score: string;
+    media_urls: string[];
+    description: string;
     report_time: string;
     type_name: string;
     location: { coordinates: [number, number] }; // [lon, lat]

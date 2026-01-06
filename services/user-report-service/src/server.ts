@@ -1,7 +1,7 @@
 import express from "express";
 import { connectRabbitMQ } from "./rabbitmq.js";
 import authMiddleware from "./middlewares/auth.middleware.js";
-import { debunkReport, verifyReport } from "./controllers/report.controller.js";
+import { broadcastRedAlertHandler, debunkReport, updateUserLocation, verifyReport } from "./controllers/report.controller.js";
 
 // handle global exceptions early
 process.on("uncaughtException", (err) => {
@@ -28,6 +28,8 @@ async function bootstrap() {
 
         // routes
         app.post("/api/v1/reports", authMiddleware, createReportHandler);
+        app.post("/api/v1/alerts/broadcast", authMiddleware, broadcastRedAlertHandler);
+        app.post("/api/v1/users/update-location", authMiddleware, updateUserLocation);
         app.patch("/api/v1/reports/verify-user-report/:report_id", authMiddleware, verifyReport);
         app.patch("/api/v1/reports/debunk-user-report/:report_id", authMiddleware, debunkReport);
         app.get("/api/v1/reports", authMiddleware, getReportsHandler);

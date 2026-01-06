@@ -6,10 +6,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useNetInfo } from '@react-native-community/netinfo';
 import { syncReports } from '../services/syncService';
 import "../global.css"; // NativeWind CSS import
+import { useLocationTracking } from '@/hooks/useLocationTracking';
 
 const queryClient = new QueryClient();
 
 export default function RootLayout() {
+    useLocationTracking();
     const netInfo = useNetInfo();
     const { accessToken, isLoading, loadSession, user } = useAuthStore();
     const segments = useSegments();

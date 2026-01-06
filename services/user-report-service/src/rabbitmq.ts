@@ -24,3 +24,11 @@ export async function publishUserReport(message: any) {
     channel!.sendToQueue(QUEUE_NAME, msgBuffer);
     logger.info(`Message sent to queue '${QUEUE_NAME}'`);
 }
+
+export async function publishToQueue(queue: string, message: any) {
+    if (!channel) await connectRabbitMQ();
+    const msgBuffer = Buffer.from(JSON.stringify(message));
+    channel!.sendToQueue(queue, msgBuffer)
+    logger.info(`Message sent to queue ${queue}`)
+}
+

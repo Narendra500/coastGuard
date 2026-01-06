@@ -1,7 +1,9 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocationTracking } from '@/hooks/useLocationTracking';
 
 export default function OfficialLayout() {
+    useLocationTracking();
     return (
         <Tabs
             screenOptions={{
